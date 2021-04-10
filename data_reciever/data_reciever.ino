@@ -16,7 +16,7 @@ const int BACK_ENGINE_RIGHT = 9;
 
 const int COMMON_GROUND = 5;
 
-int input_value[1][1];
+int input_value[1][2];
 
 void setup() {
   radio.begin();
@@ -39,20 +39,33 @@ void vegetate(){
 
 }
 
+int run_helicopter(){
+  if(input_value[0][0] == 0 and input_value[0][0] == 1){
+    for(int i=0; i<=9; i++){
+      digitalWrite(i, LOW);
+    }
+    return 0;
+  }
+
+  for(int i=0; i<=9; i++){
+    digitalWrite(i, LOW);
+  }
+}
+
 void loop() {
-  // digitalWrite(COMMON_GROUND, LOW);   // turn the LED on (HIGH is the voltage level)
 
   // digitalWrite(MID_ENGINE_HI, HIGH);   // turn the LED on (HIGH is the voltage level)
   // digitalWrite(TOP_ENGINE_LEFT, HIGH);   // turn the LED on (HIGH is the voltage level)
   // digitalWrite(BACK_ENGINE_LEFT, HIGH);   // turn the LED on (HIGH is the voltage level)
 
-  Serial.print("> ");
   if(radio.available()){ // Если в буфер приёмника поступили данные
+    run_helicopter();
     radio.read(&input_value, sizeof(input_value));
-    Serial.println(input_value[0][0]);
+    Serial.print(input_value[0][0]);
+    Serial.print(" ");
+    Serial.println(input_value[0][1]);
   }
   // else{
   //   vegetate();
   // }
-  delay(300);
 }

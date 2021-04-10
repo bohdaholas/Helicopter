@@ -30,49 +30,34 @@ void read_joysticks() {
 
   int up_down_VRx = analogRead(A0);
   int up_down_VRy = analogRead(A1);
-
+  // print_joystick(rotate_VRx, rotate_VRy);
+  // print_joystick(up_down_VRx, up_down_VRy);
+  if (is_close(up_down_VRx, 500, up_down_VRy, 500) && 
+      is_close(rotate_VRx, 500, rotate_VRy, 500)) {
+    // Stop move
+    delay_up_down = 0;
+    delay_rotate = 0;
+    // Serial.println("Stop");
+  }
   if (is_close(up_down_VRx, 0, up_down_VRy, 500)) {
     // Maximum speed upwards 
-    Serial.println("Up");
-    delay_up_down = 0;
-  }
-  if (is_close(up_down_VRx, 150, up_down_VRy, 500)) {
-    // Medium speed upwards 
-    Serial.println("Up");
-    delay_up_down = 1;
-  }
-
-  if (is_close(up_down_VRx, 760, up_down_VRy, 480)) {
-    // Medium speed downwards 
-    Serial.println("Down");
-    delay_up_down = 2;
+    // Serial.println("Up");
+    delay_up_down = 5;
   }
   if (is_close(up_down_VRx, 1000, up_down_VRy, 480)) {
     // Maximum speed downwards 
-    Serial.println("Down");
-    delay_up_down = 3;
+    // Serial.println("Down");
+    delay_up_down = -5;
   }
-
   if (is_close(rotate_VRx, 1023, rotate_VRy, 1023)) {
     // Maximum left rotation speed 
-    Serial.println("Left");
-    delay_rotate = 0;
-  }
-  if (is_close(rotate_VRx, 700, rotate_VRy, 700)) {
-    // Medium left rotation speed 
-    Serial.println("Left");
-    delay_rotate = 1;
-  }
-
-  if (is_close(rotate_VRx, 330, rotate_VRy, 330)) {
-    // Medium right rotation speed 
-    Serial.println("Right");
-    delay_rotate = 1;
+    // Serial.println("Left");
+    delay_rotate = -1;
   }
   if (is_close(rotate_VRx, 0, rotate_VRy, 0)) {
     // Maximum right rotation speed 
-    Serial.println("Right");
-    delay_rotate = 0;
+    // Serial.println("Right");
+    delay_rotate = 1;
   }
 }
 
@@ -92,8 +77,9 @@ void radio_transmit_init() {
 }
 
 void get_and_transmit_data() {
-  int delays[2] = {delay_rotate, delay_up_down};
-  radio.write(delays, 1);
+  int delays[2] = {delay_up_down, delay_rotate};
+  print_joystick(delay_up_down, delay_rotate);
+  radio.write(delays, sizeof(delays));
 }
 
 void setup() {
@@ -106,3 +92,4 @@ void loop() {
   read_joysticks();
   get_and_transmit_data();
 }
+

@@ -8,6 +8,12 @@ RF24 radio(PIN_CE, PIN_CSN);
 
 const int MID_ENGINE_HI = 8;
 
+bool flyable_x = false;
+bool flyable_y = false;
+
+int motor_delay_x;
+int motor_delay_y;
+
 const int TOP_ENGINE_LEFT = 6;
 const int TOP_ENGINE_RIGHT = 7;
 
@@ -39,17 +45,49 @@ void vegetate(){
 
 }
 
-int run_helicopter(){
-  if(input_value[0][0] == 0 and input_value[0][0] == 1){
-    for(int i=0; i<=9; i++){
-      digitalWrite(i, LOW);
+bool is_close(int VRx, int expected_VRx) {
+  int accuracy = 50;
+    if ( abs(VRx - expected_VRx) < accuracy) {
+        return true;
     }
-    return 0;
-  }
+    return false;
+}
 
-  for(int i=0; i<=9; i++){
-    digitalWrite(i, LOW);
+
+
+void run_helicopter(){  
+  if(is_close(input_value[0][0], 500)){
+    flyable_x = false;
+  }if(is_close(input_value[0][1], 512)){
+    flyable_y = false;
   }
+  else{
+    motor_delay_x = (1023-input_value[0][0]);
+    motor_delay_y = (1023-input_value[0][1]);
+    flyable_x = true;
+    flyable_y = true;
+  }
+}
+
+int trigger_helicopter(){
+  Serial.print(motor_delay_x);
+  Serial.print(" ");
+  Serial.println(motor_delay_y);
+  if(flyable_x){
+    digitalWrite(MID_ENGINE_HI, HIGH);
+    digitalWrite(TOP_ENGINE_LEFT, HIGH);
+    delay(motor_delay_x);
+  }
+  if(flyable_y){
+    digitalWrite(BACK_ENGINE_LEFT, HIGH);
+    delay(motor_delay_y);
+  }
+  else{
+    digitalWrite(MID_ENGINE_HI, LOW);
+    digitalWrite(TOP_ENGINE_LEFT, LOW);
+    digitalWrite(BACK_ENGINE_LEFT, LOW);
+  }
+  return 0;
 }
 
 void loop() {
@@ -59,11 +97,12 @@ void loop() {
   // digitalWrite(BACK_ENGINE_LEFT, HIGH);   // turn the LED on (HIGH is the voltage level)
 
   if(radio.available()){ // Если в буфер приёмника поступили данные
-    run_helicopter();
     radio.read(&input_value, sizeof(input_value));
-    Serial.print(input_value[0][0]);
-    Serial.print(" ");
-    Serial.println(input_value[0][1]);
+    run_helicopter();
+    trigger_helicopter();
+    // Serial.print(input_value[0][0]);
+    // Serial.print(" ");
+    // Serial.println(input_value[0][1]);
   }
   // else{
   //   vegetate();

@@ -1,4 +1,4 @@
-from inputs import get_gamepad, devices
+from inputs import get_gamepad
 from dataclasses import dataclass
 
 

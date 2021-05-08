@@ -1,7 +1,7 @@
 import serial
 from gamepad import Gamepad
 
-arduino_usb_port = '/dev/ttyUSB1'  # port of the raspberry pi
+arduino_usb_port = '/dev/ttyUSB0'  # port of the raspberry pi
 
 
 if __name__ == '__main__':
@@ -15,6 +15,6 @@ if __name__ == '__main__':
         gamepad_data = bytearray([gamepad.LStickX, gamepad.LStickY, gamepad.RStickX, gamepad.RStickY])
         ser.write(gamepad_data)
         # arduino response
-        line = ser.readline().decode('utf-8').rstrip()
-        if line:
-            print(line)
+        # line = ser.readline().decode('utf-8').rstrip()
+        # if line:
+        #     print(line)

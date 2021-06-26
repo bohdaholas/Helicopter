@@ -71,3 +71,4 @@ class Gamepad:
 if __name__ == '__main__':
     gamepad = Gamepad()
     gamepad.read_data(verbose=True)
+

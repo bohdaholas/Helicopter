@@ -78,8 +78,34 @@ void get_gamepad_data() {
   if(radio.available()){ 
       radio.read(&gamepad_data, sizeof(gamepad_data)); 
       yaw_delay = gamepad_data[0];
-      lift_delay = gamepad_data[1];
-      roll_delay = gamepad_data[2];
+      roll_delay = gamepad_data[1];
+      lift_delay = gamepad_data[2];
+  }
+}
+
+void fly(){
+  Serial.println(yaw_delay);
+  if (!is_close(yaw_delay, 128)){
+    spin_motor(MID_ENGINE_HI);
+    spin_motor(TOP_ENGINE_RIGHT);
+  }
+  else {
+    turn_off_motor(MID_ENGINE_HI);
+    turn_off_motor(TOP_ENGINE_RIGHT);
+  }
+
+  if (is_close(lift_delay, 0)){
+    spin_motor(BACK_ENGINE_LEFT);
+  }
+  else{
+    turn_off_motor(BACK_ENGINE_LEFT);
+  }
+
+  if (is_close(lift_delay, 255)){
+    spin_motor(BACK_ENGINE_RIGHT);
+  }
+  else{
+    turn_off_motor(BACK_ENGINE_RIGHT);
   }
 }
 
@@ -97,15 +123,5 @@ void loop() {
   delay(15.625);
   //print_gamepad_data();
   
-  Serial.println(yaw_delay);
-  if (!is_close(yaw_delay, 128)){
-    spin_motor(MID_ENGINE_HI);
-    spin_motor(TOP_ENGINE_RIGHT);
-  }
-  else {
-    turn_off_motor(MID_ENGINE_HI);
-    turn_off_motor(TOP_ENGINE_RIGHT);
-  }
-  
-  // fly();
+  fly();
 }

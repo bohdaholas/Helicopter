@@ -28,7 +28,7 @@ float SEq_1 = 1.0f, SEq_2 = 0.0f, SEq_3 = 0.0f, SEq_4 = 0.0f; // estimated orien
 
 Adafruit_MPU6050 mpu;
 char buf[100];
-Orientation *orientation = {0.0f, 0.0f, 0.0f};
+Orientation *orient;
 
 
 void setup(void) {
@@ -57,21 +57,28 @@ void loop() {
 
   // updates the values using Madgewick filter
   filterUpdate(g.gyro.x, g.gyro.y, g.gyro.z,
-               a.acceleration.x, a.acceleration.y, a.acceleration.z)
+               a.acceleration.x, a.acceleration.y, a.acceleration.z);
   // converts the resulting quaterinon into euler angles
   quat2euler(orient, SEq_1, SEq_2, SEq_3, SEq_4);
-  printOrientation(orient) ;
 }
 
 
 void quat2euler(Orientation *orient, float SEq_1, float SEq_2, float SEq_3 , float SEq_4) {
-  orient->yaw = atan2(2.0f * (SEq_2 * SEq_3 + SEq_1 * SEq_4), SEq_1 * SEq_1 + SEq_2 * SEq_2 - SEq_3 * SEq_3 - SEq_4 * SEq_4);
-  orient->pitch = -asin(2.0f * (SEq_2 * SEq_4 - SEq_1 * SEq_3));
-  orient->roll = atan2(2.0f * (SEq_1 * SEq_2 + SEq_3 * SEq_4), SEq_1 * SEq_1 - SEq_2 * SEq_2 - SEq_3 * SEq_3 + SEq_4 * SEq_4);
+  float yaw = atan2(2.0f * (SEq_2 * SEq_3 + SEq_1 * SEq_4), SEq_1 * SEq_1 + SEq_2 * SEq_2 - SEq_3 * SEq_3 - SEq_4 * SEq_4);
+  float pitch = -asin(2.0f * (SEq_2 * SEq_4 - SEq_1 * SEq_3));
+  float roll  = atan2(2.0f * (SEq_1 * SEq_2 + SEq_3 * SEq_4), SEq_1 * SEq_1 - SEq_2 * SEq_2 - SEq_3 * SEq_3 + SEq_4 * SEq_4);
+  // printOrientation(orient);
+  Serial.print(yaw);
+  Serial.print(" - ");
+  Serial.print(pitch);
+  Serial.print(" - ");
+  Serial.println(roll); 
 }
 
 void printOrientation(Orientation *orient) {
-  Serial.println("Orientation: yaw %f pitch %f roll %f", orient->yaw, orient->pitch, orient->roll);
+  sprintf(buf, "Orientation: yaw %f pitch %f roll %f", orient->yaw, orient->pitch, orient->roll);
+  Serial.println(buf);
+  memset(buf, 0, sizeof(buf));
 }
 
 void filterUpdate(float w_x, float w_y, float w_z, float a_x, float a_y, float a_z)

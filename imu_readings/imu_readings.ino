@@ -10,6 +10,7 @@
 #define gyroMeasError 3.14159265358979f * (5.0f / 180.0f) // gyroscope measurement error in rad/s (shown as 5 deg/s)
 #define beta sqrt(3.0f / 4.0f) * gyroMeasError // compute beta
 #define MAXSIZE 100
+#define CALIBRATION 20
 
 // types
 typedef struct state {
@@ -22,13 +23,14 @@ void quat2euler(Orientation *orient, float SEq_1, float SEq_2, float SEq_3 , flo
 void printOrientation(Orientation *orient);
 
 // Global variables
-float a_x, a_y, a_z; // accelerometer measurements
-float w_x, w_y, w_z; // gyroscope measurements in rad/s
-float SEq_1 = 1.0f, SEq_2 = 0.0f, SEq_3 = 0.0f, SEq_4 = 0.0f; // estimated orientation quaternion elements with initial conditions
+volatile float SEq_1 = 1.0f, SEq_2 = 0.0f, SEq_3 = 0.0f, SEq_4 = 0.0f; // estimated orientation quaternion elements with initial conditions
 
 Adafruit_MPU6050 mpu;
 char buf[100];
-Orientation *orient;
+Orientation orient = { .pitch = 0.0f, .yaw = 0.0f, .roll = 0.0};
+float gyro_drift_x, gyro_drift_y, gyro_drift_z;
+bool calibrated = false;
+int iteration = 0;
 
 
 void setup(void) {
@@ -43,7 +45,7 @@ void setup(void) {
   }
 
   // settings
-  mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
   mpu.setGyroRange(MPU6050_RANGE_250_DEG);
   mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
 }
@@ -55,11 +57,28 @@ void loop() {
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
 
+  if (iteration < CALIBRATION) {
+      gyro_drift_x += g.gyro.x;
+      gyro_drift_y += g.gyro.y;
+      gyro_drift_z += g.gyro.z;
+  }
+
+  if (!calibrated && iteration >= CALIBRATION) {
+    gyro_drift_x /= CALIBRATION;
+    gyro_drift_y /= CALIBRATION;
+    gyro_drift_z /= CALIBRATION;
+    calibrated = !calibrated;
+  }
+
   // updates the values using Madgewick filter
   filterUpdate(g.gyro.x, g.gyro.y, g.gyro.z,
                a.acceleration.x, a.acceleration.y, a.acceleration.z);
   // converts the resulting quaterinon into euler angles
-  quat2euler(orient, SEq_1, SEq_2, SEq_3, SEq_4);
+  if (iteration > CALIBRATION * 2) {
+     quat2euler(&orient, SEq_1, SEq_2, SEq_3, SEq_4);
+  }
+
+  iteration++;
 }
 
 
@@ -73,6 +92,12 @@ void quat2euler(Orientation *orient, float SEq_1, float SEq_2, float SEq_3 , flo
   Serial.print(pitch);
   Serial.print(" - ");
   Serial.println(roll); 
+  orient->yaw = yaw;
+  orient->pitch = pitch;
+  orient->roll = roll;
+  Serial.println("--------")
+  printOrientation(orient);
+  Serial.println("--------")
 }
 
 void printOrientation(Orientation *orient) {

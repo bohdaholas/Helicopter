@@ -3,25 +3,33 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
+#include <math.h>
 
+// System constants
+#define deltat 0.2f // sampling period in seconds (shown as 1 ms)
+#define gyroMeasError 3.14159265358979f * (5.0f / 180.0f) // gyroscope measurement error in rad/s (shown as 5 deg/s)
+#define beta sqrt(3.0f / 4.0f) * gyroMeasError // compute beta
 #define MAXSIZE 100
-#define dt 0.2
 
-typedef struct data {
-  float x, y, z;
-} Axis3f;
+// types
+typedef struct state {
+   float pitch, yaw, roll;
+} Orientation;
 
-typedef sturct orientation {
-  float pitch, yaw, roll;
-} state_t;
+// Functions
+void filterUpdate(float w_x, float w_y, float w_z, float a_x, float a_y, float a_z);
+void quat2euler(Orientation *orient, float SEq_1, float SEq_2, float SEq_3 , float SEq_4);
+void printOrientation(Orientation *orient);
 
-void imuUpdate(Axis3f acc, Axis3f gyro, state_t *state , float dt);
+// Global variables
+float a_x, a_y, a_z; // accelerometer measurements
+float w_x, w_y, w_z; // gyroscope measurements in rad/s
+float SEq_1 = 1.0f, SEq_2 = 0.0f, SEq_3 = 0.0f, SEq_4 = 0.0f; // estimated orientation quaternion elements with initial conditions
 
 Adafruit_MPU6050 mpu;
 char buf[100];
-state_t *state = {.pitch = 0., .yaw = 0., .roll = 0.};
-Axis3f acc;
-Axis3f gyro;
+Orientation *orientation = {0.0f, 0.0f, 0.0f};
+
 
 void setup(void) {
   Serial.begin(115200);
@@ -42,92 +50,86 @@ void setup(void) {
 
 
 void loop() {
-
   /* Get new sensor events with the readings */
   // temp is a pointer to temperature data
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
 
-  acc.x = a.acceleration.x;
-  acc.y = a.acceleration.y;
-  acc.z = a.acceleration.z;
-
-  gyro.x = a.gyro.x;
-  gyro.y = a.gyro.y;
-  gyro.z = a.gyro.z;
-
-
-  imuUpdate(acc, gyro, state, dt);
-  Serial.println("pitch: %f; yaw: %f; roll: %f", state->pitch, state->yaw, state->roll);
-
-  /* Print out the values */
-  // Acceleration - m/s^2
-  // sprintf(buf, "%f;%f;%f|%f;%f;f", a.acceleration.x, a.acceleration.y, a.acceleration.z,
-  //                                 g.gyro.x, g.gyro.y, g.gyro.z);
-  // Serial.println(buf);
-  // memset(buf, 0, sizeof(buffer));
+  // updates the values using Madgewick filter
+  filterUpdate(g.gyro.x, g.gyro.y, g.gyro.z,
+               a.acceleration.x, a.acceleration.y, a.acceleration.z)
+  // converts the resulting quaterinon into euler angles
+  quat2euler(orient, SEq_1, SEq_2, SEq_3, SEq_4);
+  printOrientation(orient) ;
 }
 
-void imuUpdate(Axis3f acc, Axis3f gyro, state_t *state , float dt)
+
+void quat2euler(Orientation *orient, float SEq_1, float SEq_2, float SEq_3 , float SEq_4) {
+  orient->yaw = atan2(2.0f * (SEq_2 * SEq_3 + SEq_1 * SEq_4), SEq_1 * SEq_1 + SEq_2 * SEq_2 - SEq_3 * SEq_3 - SEq_4 * SEq_4);
+  orient->pitch = -asin(2.0f * (SEq_2 * SEq_4 - SEq_1 * SEq_3));
+  orient->roll = atan2(2.0f * (SEq_1 * SEq_2 + SEq_3 * SEq_4), SEq_1 * SEq_1 - SEq_2 * SEq_2 - SEq_3 * SEq_3 + SEq_4 * SEq_4);
+}
+
+void printOrientation(Orientation *orient) {
+  Serial.println("Orientation: yaw %f pitch %f roll %f", orient->yaw, orient->pitch, orient->roll);
+}
+
+void filterUpdate(float w_x, float w_y, float w_z, float a_x, float a_y, float a_z)
 {
-  float normalise;
-  float ex, ey, ez;
-  float halfT = 0.5f * dt;
-  float accBuf[3] = {0.f};
-  Axis3f tempacc = acc;
- 
-  gyro.x = gyro.x * DEG2RAD;
-  gyro.y = gyro.y * DEG2RAD;
-  gyro.z = gyro.z * DEG2RAD;
-  
-  /* if the three-axis accelerometer is operating, then use Mahony filter*/
-  if((acc.x != 0.0f) || (acc.y != 0.0f) || (acc.z != 0.0f))
-  {
-    normalise = invSqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-    acc.x *= normalise;
-    acc.y *= normalise;
-    acc.z *= normalise;
-  
-    /*through vector cross product to show measured attitude error of 
-               gyrpscope */
-    ex = (acc.y * rMat[2][2] - acc.z * rMat[2][1]);
-    ey = (acc.z * rMat[2][0] - acc.x * rMat[2][2]);
-    ez = (acc.x * rMat[2][1] - acc.y * rMat[2][0]);
-  
-    /*intergration of error*/
-    exInt += Ki * ex * dt ;  
-    eyInt += Ki * ey * dt ;
-    ezInt += Ki * ez * dt ;
-  
-    /*PI controller to fuse data*/
-    gyro.x += Kp * ex + exInt;
-    gyro.y += Kp * ey + eyInt;
-    gyro.z += Kp * ez + ezInt;
-  }
-  
-  /*update quaternion through Runge–Kutta methods in discrete system*/
-  float q0Last = q0;
-  float q1Last = q1;
-  float q2Last = q2;
-  float q3Last = q3;
-  
-  q0 += (-q1Last * gyro.x - q2Last * gyro.y - q3Last * gyro.z) * halfT;
-  q1 += ( q0Last * gyro.x + q2Last * gyro.z - q3Last * gyro.y) * halfT;
-  q2 += ( q0Last * gyro.y - q1Last * gyro.z + q3Last * gyro.x) * halfT;
-  q3 += ( q0Last * gyro.z + q1Last * gyro.y - q2Last * gyro.x) * halfT;
-  
-  normalise = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
-  
-  q0 *= normalise;
-  q1 *= normalise;
-  q2 *= normalise;
-  q3 *= normalise;
-  
-  /*calculate rotation matrix*/
-  imuComputeRotationMatrix(); 
-  
-  /*calculate euler angle from quaternion*/
-  state->pitch = -asinf(rMat[2][0]) * RAD2DEG; 
-  state->roll = atan2f(rMat[2][1], rMat[2][2]) * RAD2DEG;
-  state->yaw = atan2f(rMat[1][0], rMat[0][0]) * RAD2DEG;
+    // Local system variables
+    float norm; // vector norm
+    float SEqDot_omega_1, SEqDot_omega_2, SEqDot_omega_3, SEqDot_omega_4; // quaternion derrivative from gyroscopes elements
+    float f_1, f_2, f_3; // objective function elements
+    float J_11or24, J_12or23, J_13or22, J_14or21, J_32, J_33; // objective function Jacobian elements
+    float SEqHatDot_1, SEqHatDot_2, SEqHatDot_3, SEqHatDot_4; // estimated direction of the gyroscope error
+    // Axulirary variables to avoid reapeated calcualtions
+    float halfSEq_1 = 0.5f * SEq_1;
+    float halfSEq_2 = 0.5f * SEq_2;
+    float halfSEq_3 = 0.5f * SEq_3;
+    float halfSEq_4 = 0.5f * SEq_4;
+    float twoSEq_1 = 2.0f * SEq_1;
+    float twoSEq_2 = 2.0f * SEq_2;
+    float twoSEq_3 = 2.0f * SEq_3;
+    // Normalise the accelerometer measurement
+    norm = sqrt(a_x * a_x + a_y * a_y + a_z * a_z);
+    a_x /= norm;
+    a_y /= norm;
+    a_z /= norm;
+    // Compute the objective function and Jacobian
+    f_1 = twoSEq_2 * SEq_4 - twoSEq_1 * SEq_3 - a_x;
+    f_2 = twoSEq_1 * SEq_2 + twoSEq_3 * SEq_4 - a_y;
+    f_3 = 1.0f - twoSEq_2 * SEq_2 - twoSEq_3 * SEq_3 - a_z;
+    J_11or24 = twoSEq_3; // J_11 negated in matrix multiplication
+    J_12or23 = 2.0f * SEq_4;
+    J_13or22 = twoSEq_1; // J_12 negated in matrix multiplication
+    J_14or21 = twoSEq_2;
+    J_32 = 2.0f * J_14or21; // negated in matrix multiplication
+    J_33 = 2.0f * J_11or24; // negated in matrix multiplication
+    // Compute the gradient (matrix multiplication)
+    SEqHatDot_1 = J_14or21 * f_2 - J_11or24 * f_1;
+    SEqHatDot_2 = J_12or23 * f_1 + J_13or22 * f_2 - J_32 * f_3;
+    SEqHatDot_3 = J_12or23 * f_2 - J_33 * f_3 - J_13or22 * f_1;
+    SEqHatDot_4 = J_14or21 * f_1 + J_11or24 * f_2;
+    // Normalise the gradient
+    norm = sqrt(SEqHatDot_1 * SEqHatDot_1 + SEqHatDot_2 * SEqHatDot_2 + SEqHatDot_3 * SEqHatDot_3 + SEqHatDot_4 * SEqHatDot_4);
+    SEqHatDot_1 /= norm;
+    SEqHatDot_2 /= norm;
+    SEqHatDot_3 /= norm;
+    SEqHatDot_4 /= norm;
+    // Compute the quaternion derrivative measured by gyroscopes
+    SEqDot_omega_1 = -halfSEq_2 * w_x - halfSEq_3 * w_y - halfSEq_4 * w_z;
+    SEqDot_omega_2 = halfSEq_1 * w_x + halfSEq_3 * w_z - halfSEq_4 * w_y;
+    SEqDot_omega_3 = halfSEq_1 * w_y - halfSEq_2 * w_z + halfSEq_4 * w_x;
+    SEqDot_omega_4 = halfSEq_1 * w_z + halfSEq_2 * w_y - halfSEq_3 * w_x;
+    // Compute then integrate the estimated quaternion derrivative
+    SEq_1 += (SEqDot_omega_1 - (beta * SEqHatDot_1)) * deltat;
+    SEq_2 += (SEqDot_omega_2 - (beta * SEqHatDot_2)) * deltat;
+    SEq_3 += (SEqDot_omega_3 - (beta * SEqHatDot_3)) * deltat;
+    SEq_4 += (SEqDot_omega_4 - (beta * SEqHatDot_4)) * deltat;
+    // Normalise quaternion
+    norm = sqrt(SEq_1 * SEq_1 + SEq_2 * SEq_2 + SEq_3 * SEq_3 + SEq_4 * SEq_4);
+    SEq_1 /= norm;
+    SEq_2 /= norm;
+    SEq_3 /= norm;
+    SEq_4 /= norm;
 }

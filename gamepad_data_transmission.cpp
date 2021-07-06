@@ -18,8 +18,8 @@ void init_radio() {
 }
  
 void setup() {
-  Serial.begin(9600);
-  Serial.setTimeout(20);
+  Serial.begin(115200);
+  // Serial.setTimeout(20);
   init_radio();
 }
 

@@ -2,6 +2,8 @@
 #include <SPI.h>  
 #include <nRF24L01.h> 
 #include <RF24.h> 
+#include <MPU6050>
+
 #define PIN_CE  2  
 #define PIN_CSN 10 
 RF24 radio(PIN_CE, PIN_CSN); 
@@ -19,6 +21,27 @@ int yaw_delay; // left and right rotation
 int lift_delay; // up and down
 int roll_delay; // left and right movement
 int pitch_delay; // back and forth
+
+void setup() {
+  Serial.begin(9600);
+  init_radio();
+  init_helicopter();  
+  init_imu();
+}
+ 
+void loop() {
+  double x, y, z;
+  get_gamepad_data();
+  get_imu_data();
+  // print_gamepad_data();
+  // fly();
+}
+
+void init_imu();
+
+void get_imu_data(Angles *angles) {
+
+}
 
 void init_helicopter() {
   for(int i = 4; i <= 9; i++){
@@ -64,7 +87,7 @@ void lift() {
 }
 
 void pitch() {
-
+  ;
 }
 
 void yaw() {
@@ -90,9 +113,9 @@ void fly(){
 void init_radio() {
   radio.begin();
   radio.setChannel(5);
-  radio.setDataRate (RF24_1MBPS);
+  radio.setDataRate(RF24_1MBPS);
   radio.setPALevel(RF24_PA_HIGH); 
-  radio.openReadingPipe (1, 0x7878787878LL);
+  radio.openReadingPipe(1, 0x7878787878LL);
   radio.startListening();
 }
 
@@ -107,21 +130,11 @@ void print_gamepad_data() {
 void get_gamepad_data() {
   if(radio.available()){ 
       radio.read(&gamepad_data, sizeof(gamepad_data)); 
+
+      // those are four values proceeded by python's script
       yaw_delay = gamepad_data[0];
       lift_delay = gamepad_data[1];
       roll_delay = gamepad_data[2];
       pitch_delay = gamepad_data[3];
   }
-}
-
-void setup() {
-  Serial.begin(9600);
-  init_radio();
-  init_helicopter();  
-}
- 
-void loop() {
-  get_gamepad_data();
-  // print_gamepad_data();
-  // fly();
 }

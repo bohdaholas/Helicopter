@@ -77,6 +77,9 @@ void loop() {
   if (iteration > CALIBRATION * 2) {
      quat2euler(&orient, SEq_1, SEq_2, SEq_3, SEq_4);
   }
+  else {
+    Serial.println("...");
+  }
 
   iteration++;
 }
@@ -95,9 +98,9 @@ void quat2euler(Orientation *orient, float SEq_1, float SEq_2, float SEq_3 , flo
   orient->yaw = yaw;
   orient->pitch = pitch;
   orient->roll = roll;
-  Serial.println("--------")
+  Serial.println("--------");
   printOrientation(orient);
-  Serial.println("--------")
+  Serial.println("--------");
 }
 
 void printOrientation(Orientation *orient) {

@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <SPI.h>  
+// #include <cstdlib>
 #include <nRF24L01.h> 
 #include <RF24.h> 
 #define PIN_CE  2  
@@ -27,11 +28,25 @@ int yaw_delay = 128; // left and right rotation
 int lift_delay = 128; // up and down
 int roll_delay = 128; // left and right movement
 
-void init_helicopter() {
-  for(int i = 4; i <= 9; i++){
-    pinMode(i, OUTPUT);
+//                   0   1   2   3   4   5     //
+byte analogPins[] = {A0, A1, A2, A3, A4, A5};
+
+void initMotors() {
+
+  for(int i = 0; i < 6; i++){
+    pinMode(analogPins[i], OUTPUT);
   }
-  digitalWrite(COMMON_GROUND, 0);
+}
+
+void allMotorsHi(){
+  for(int i = 0; i < 6; i++){
+    analogWrite(analogPins[i], 255);
+  }
+}
+void allMotorsLo(){
+  for(int i = 0; i < 6; i++){
+    analogWrite(analogPins[i], 0);
+  }
 }
 
 bool is_close(int a, int b) {
@@ -42,21 +57,15 @@ bool is_close(int a, int b) {
     return false;
 }
 
-//                   0   1   2   3   4   5
-byte analogPins[] = {A0, A1, A2, A3, A5, A7};
 
 void findMotors(){
-  for(int i = 0; i < 6; i++) {
-    pinMode(analogPins[i], OUTPUT);
-    analogWrite(analogPins[i], 255);
-  }
-
   for(int i = 0; i < 6; i++){
-    analogWrite(analogPins[i], 0);
-    delay(1000);
-    analogWrite(analogPins[i], 255);
-    Serial.println(i);
-
+    if(i != 4){
+        analogWrite(analogPins[i], 0);
+        delay(1000);
+        analogWrite(analogPins[i], 255);
+        Serial.println(i);
+    }
   }
 }
 
@@ -166,15 +175,17 @@ int * intToBinSeq(int num){
     return binSeq;
 }
 
-
+bool isClose(double a, double b, double EPSILON){
+    double lhs = a > b ? a-b : b-a;
+    return lhs < EPSILON;
+}
 ///////////////////////////////////////////////
+
 
 void setup() {
   Serial.begin(9600);
   init_radio();
-  // init_helicopter();  
-  //pinMode(A0, OUTPUT);
-  // pinMode(A3, OUTPUT);
+  initMotors();  
 
   for(int i = 0; i < BUFFER_SIZE; i++){
     engine[i] = 0;
@@ -182,31 +193,65 @@ void setup() {
 }
  
 void loop() {
+    counter = counter%BUFFER_SIZE;
+    const double EPSILON = 0.01;
 
-//   while(Serial.available()){  //is there anything to read?
-//     char getData = Serial.read();  //if yes, read it
-//   }   // don't do anything with it.
-//   get_gamepad_data();
-//   findMotors();
-// 
-//   delay(15.625);
-  // print_gamepad_data();
-  
-  // analogWrite(A1, 0);
-  // analogWrite(A3, 131);
+    get_gamepad_data();
+
+    //Serial.print("Yaw: ");
+    //Serial.println(yaw_delay);
+
+    int * yawBinVector;
+    yawBinVector = intToBinSeq(yaw_delay);
+    
+    float memoryBufferAvr = computeBufferAverage(engine, BUFFER_SIZE);
+    float requiredBufferAvr = computeBufferAverage(yawBinVector, MAX_VAL);
+
+    delay(15.625);
+    print_gamepad_data();
+
+    analogWrite(A5, 0);
+    //Serial.print("> ");
+    if(isClose(requiredBufferAvr, 0, EPSILON)) {
+        analogWrite(A4, 0);
+        engine[counter] = 0;
+     //   Serial.println(0);
+    }
+    else if(memoryBufferAvr > requiredBufferAvr){
+        analogWrite(A4, 0);
+        engine[counter] = 0;
+      //  Serial.println(0);
+    }
+    else{
+        analogWrite(A4, 255);
+        engine[counter] = 1;
+      //  Serial.println(255);
+    }
+
+//    allMotorsLo();
+    // analogWrite(A1, 255);
+    // analogWrite(A0, 0);
+    // analogWrite(A3, 255);
+    // analogWrite(A2, 0);
+//    analogWrite(A4, 255);
+//    analogWrite(A5, 0);
+
+
 
 
   // A0 - Low; A1 - High -> mid engine right
   // A1 - Low; A0 - High -> mid engine left
-
   // A2 - Low; A3 - High -> top engine right
   // A3 - Low; A2 - High -> top engine left
-
   // A0 - Low; A5 - High -> back engine left
   // A5 - Low; A7 - High -> back engine right
-
     // A0 A5 back left
     // A5 (0) A7(1) back right
     // A2 A3 / A3 A2 - top ok
 //   fly();
+//    while(Serial.aailable()){  //is there anything to read?
+//      char getData = Serial.read();  //if yes, read it
+//    }   // don't do anything with it.
+   // findMotors();
+    counter++;
 }

@@ -24,10 +24,17 @@ void setup() {
 }
 
 void loop() {
+  delay(10);
   if (Serial.available() > 0) {
     int data_length = Serial.readBytes(gamepad_data, BUFFER_SIZE);
+    Serial.print("len: ");
+    Serial.print(data_length);
+    Serial.print("  :  ");
     radio.write(gamepad_data, sizeof(gamepad_data)); 
-    for(int i = 0; i < data_length; i++)
-      Serial.print(gamepad_data[i]);
+    for(int i = 0; i < data_length; i++){
+        Serial.print(gamepad_data[i]);
+        Serial.print(" ");
+    }
+    Serial.println();
   }
 }

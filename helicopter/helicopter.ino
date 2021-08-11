@@ -11,8 +11,14 @@ RF24 radio(PIN_CE, PIN_CSN);
 # define MAX_VAL 255
 # define BUFFER_SIZE 5
 
-int engine[BUFFER_SIZE];
+// yaw buffer = roll buffer
+int yawBuffer[BUFFER_SIZE], rollBuffer[BUFFER_SIZE], liftBuffer[BUFFER_SIZE],
+    midMotorBuf[BUFFER_SIZE], topMotorBuf[BUFFER_SIZE];
 int counter = 0;
+
+float computeBufferAverage(int * buff, int buffSize);
+int * intToBinSeq(int num);
+bool isClose(double a, double b, double EPSILON);
 
 
 const int MID_ENGINE_HI = 8; // by default spinning Left
@@ -102,50 +108,126 @@ void init_radio() {
 }
 
 void print_gamepad_data() {
-  for(int i = 0; i < 3; i++) {
-    Serial.print(gamepad_data[i]);
-    Serial.print(" ");
-  }
+    for(int i = 0; i < 3; i++) {
+        Serial.print(gamepad_data[i]);
+        Serial.print(" ");
+    }
     Serial.println();
 }
 
 void get_gamepad_data() {
-  if(radio.available()){ 
-      radio.read(&gamepad_data, sizeof(gamepad_data)); 
-      yaw_delay = gamepad_data[0];
-      roll_delay = gamepad_data[1];
-      lift_delay = gamepad_data[2];
-  }
+    if(radio.available()){ 
+        radio.read(&gamepad_data, sizeof(gamepad_data)); 
+        yaw_delay = gamepad_data[0];
+        roll_delay = gamepad_data[1];
+        lift_delay = gamepad_data[2];
+    }
 }
 
 void fly(){
-  // Serial.println(yaw_delay);
-  if (!is_close(yaw_delay, 128)){
-    spin_motor(MID_ENGINE_HI);
-    spin_motor(TOP_ENGINE_RIGHT);
-  }
-  else {
-    turn_off_motor(MID_ENGINE_HI);
-    turn_off_motor(TOP_ENGINE_RIGHT);
-  }
+    const double EPSILON = 0.01;
 
-  if (is_close(lift_delay, 0)){
-    spin_motor(BACK_ENGINE_LEFT);
-  }
-  else{
-    turn_off_motor(BACK_ENGINE_LEFT);
-  }
+    int * yawBinVector, *rollBinVector, *liftBinVector;
+    yawBinVector = intToBinSeq(yaw_delay);
+    rollBinVector = intToBinSeq(roll_delay);
+    liftBinVector = intToBinSeq(lift_delay);
+    
+    float yawMemoryBufferAvr = computeBufferAverage(yawBuffer, BUFFER_SIZE);
+    float yawRequiredBufferAvr = computeBufferAverage(yawBinVector, MAX_VAL);
 
-  if (is_close(lift_delay, 255)){
-    spin_motor(BACK_ENGINE_RIGHT);
-  }
-  else{
-    turn_off_motor(BACK_ENGINE_RIGHT);
-  }
+    float rollMemoryBufferAvr = computeBufferAverage(rollBuffer, BUFFER_SIZE);
+    float rollRequiredBufferAvr = computeBufferAverage(rollBinVector, MAX_VAL);
+
+    float liftMemoryBufferAvr = computeBufferAverage(liftBuffer, BUFFER_SIZE);
+    float liftRequiredBufferAvr = computeBufferAverage(liftBinVector, MAX_VAL);
+    float liftMidMotorRequiredBufAvr, liftTopMotorRequiredBufAvr;
+
+    // initiall mid and top engines should rotate with the same force (or its absence) in opposite dirrections
+    liftMidMotorRequiredBufAvr = liftTopMotorRequiredBufAvr = computeBufferAverage(liftBinVector, MAX_VAL);
+
+    delay(5.625);
+
+
+    //  YAW
+    if(isClose(yawRequiredBufferAvr, 128, EPSILON)){
+        analogWrite(A4, 0);
+        analogWrite(A5, 0);
+        yawBuffer[counter] = 0;
+    }
+    else if(yawRequiredBufferAvr > 128){
+        analogWrite(A5, 255);
+        analogWrite(A4, 0);
+        yawBuffer[counter] = 1;
+    }
+    else{
+        analogWrite(A4, 255);
+        analogWrite(A5, 0);
+        yawBuffer[counter] = -1;
+    }
+
+    //  ROLL alterations of mid and top mottor forces (if any)
+    if(!isClose(rollRequiredBufferAvr, 128, EPSILON)){
+        if(rollRequiredBufferAvr > rollMemoryBufferAvr){
+            liftMidMotorRequiredBufAvr -= liftMidMotorRequiredBufAvr/5;
+            liftTopMotorRequiredBufAvr += liftMidMotorRequiredBufAvr/5;
+        }
+        else{
+            liftMidMotorRequiredBufAvr += liftMidMotorRequiredBufAvr/5;
+            liftTopMotorRequiredBufAvr -= liftMidMotorRequiredBufAvr/5;
+        }
+    }
+    
+    //  LIFT (y axis motors)
+    if(isClose(liftMidMotorRequiredBufAvr, 128, EPSILON)){
+        analogWrite(A0, 0);
+        analogWrite(A1, 0);
+
+        midMotorBuf[counter] = 0;
+        liftBuffer[counter] = 0;
+    }
+    if(isClose(liftTopMotorRequiredBufAvr, 128, EPSILON)){
+        analogWrite(A2, 0);
+        analogWrite(A3, 0);
+
+        topMotorBuf[counter] = 0;
+        liftBuffer[counter] = 0;
+    }
+
+    if( !isClose(liftTopMotorRequiredBufAvr, 128, EPSILON) && !isClose(liftMidMotorRequiredBufAvr, 128, EPSILON) ){
+        // Mid motor
+        if(liftMidMotorRequiredBufAvr > 128){
+            analogWrite(A1, 255);
+            analogWrite(A0, 0);
+
+            midMotorBuf[counter] = 1;
+        }
+        else{
+            analogWrite(A0, 0);
+            analogWrite(A1, 255);
+
+            midMotorBuf[counter] = -1;
+        }
+
+        // Top motor
+        if(liftTopMotorRequiredBufAvr > 128){
+            analogWrite(A2, 255);
+            analogWrite(A3, 0);
+
+            topMotorBuf[counter] = 1;
+        }
+        else{
+            analogWrite(A2, 0);
+            analogWrite(A3, 255);
+
+            topMotorBuf[counter] = -1;
+        }
+
+        liftBuffer[counter] = 1 - abs(liftMidMotorRequiredBufAvr - liftTopMotorRequiredBufAvr);
+    }
 }
 
 
-// Delays ////////////////////
+/*               Delays                 */
 float computeBufferAverage(int * buff, int buffSize){
     int buffSum = 0;
     for(int i = 0; i < buffSize; ++i) buffSum += buff[i];
@@ -186,47 +268,32 @@ void setup() {
   Serial.begin(9600);
   init_radio();
   initMotors();  
+  allMotorsLo();
 
   for(int i = 0; i < BUFFER_SIZE; i++){
-    engine[i] = 0;
+    yawBuffer[i] = 0;
+    rollBuffer[i] = 0;
+    liftBuffer[i] = 0;
   }
 }
  
 void loop() {
+
     counter = counter%BUFFER_SIZE;
-    const double EPSILON = 0.01;
 
     get_gamepad_data();
-
-    //Serial.print("Yaw: ");
-    //Serial.println(yaw_delay);
-
-    int * yawBinVector;
-    yawBinVector = intToBinSeq(yaw_delay);
-    
-    float memoryBufferAvr = computeBufferAverage(engine, BUFFER_SIZE);
-    float requiredBufferAvr = computeBufferAverage(yawBinVector, MAX_VAL);
-
-    delay(15.625);
     print_gamepad_data();
+//    fly();
+    
 
-    analogWrite(A5, 0);
-    //Serial.print("> ");
-    if(isClose(requiredBufferAvr, 0, EPSILON)) {
-        analogWrite(A4, 0);
-        engine[counter] = 0;
-     //   Serial.println(0);
-    }
-    else if(memoryBufferAvr > requiredBufferAvr){
-        analogWrite(A4, 0);
-        engine[counter] = 0;
-      //  Serial.println(0);
-    }
-    else{
-        analogWrite(A4, 255);
-        engine[counter] = 1;
-      //  Serial.println(255);
-    }
+
+    analogWrite(A3, 0);
+    analogWrite(A2, 255);
+
+    analogWrite(A1, 255);
+    analogWrite(A0, 0);
+
+    counter++;
 
 //    allMotorsLo();
     // analogWrite(A1, 255);
@@ -248,7 +315,6 @@ void loop() {
     // A0 A5 back left
     // A5 (0) A7(1) back right
     // A2 A3 / A3 A2 - top ok
-//   fly();
 //    while(Serial.aailable()){  //is there anything to read?
 //      char getData = Serial.read();  //if yes, read it
 //    }   // don't do anything with it.
